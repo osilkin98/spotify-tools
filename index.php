@@ -6,7 +6,7 @@
   </head>
   <body>
 
-    <form action="processing.php" method="post">
+    <form action="auth.php" method="post">
     Artist Name: <input type="text" name="artist_name"><br>
     <input type="submit">
     </form>
