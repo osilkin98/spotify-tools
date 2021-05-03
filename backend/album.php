@@ -1,23 +1,25 @@
 <?php
 
 
-class Artist {
+class Album {
     public string $name;
     public string $uri;
     public string $id;
-    public string $href;
-    public int $popularity;
+    public string $releaseDate;
+    public int $totalTracks;
 
     // optional attributes may be used for rendering 
     public array $images;
-    public array $genres;
+    public array $tracks;
 
-    public function __construct(string $name, string $id, string $uri, int $popularity, string $href) {
+    public function __construct(string $name, string $id, string $uri, string $releaseDate, int $totalTracks, array $images=[], array $tracks=[]) {
         $this->name = $name;
         $this->id = $id;
         $this->uri = $uri;
-        $this->href = $href;
-        $this->popularity = $popularity;
+        $this->releaseDate = $releaseDate;
+        $this->totalTracks = $totalTracks;
+        $this->images = $images;
+        $this->tracks = $tracks;
     }
 
     public function get_smallest_image() {
@@ -38,13 +40,14 @@ class Artist {
         $largestImage = null;
         foreach($this->images as $image) 
         {
-            if($image['width'] * $image['height'] >= $largestHeight * $largestWidth) 
+            if($image->width * $image->height >= $largestHeight * $largestWidth) 
             {
-                $largestWidth = $image['width'];
-                $largestHeight = $image['height'];
+                $largestWidth = $image->width;
+                $largestHeight = $image->height;
                 $largestImage = $image;
             }
         }
+        
         return $largestImage;
     }
 }

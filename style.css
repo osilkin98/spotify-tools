@@ -1,3 +1,54 @@
+
+/* text */
+h1, h2, h3, h4, i, p, .artist-name > a, .black-text, .main-website-logo_right, li > a {
+    background-color: black;
+    background: black;
+    color: white;
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+
+}
+
+.main-website-logo {
+    max-width: min-content;
+    border-style: solid;
+    border-width: 1px;
+    border: black;
+}
+
+.main-website-logo_left, .main-website-logo_right
+{
+    font-size: 5em;
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+}
+
+/* track listing styling */
+.tracklist > li {
+    list-style: cjk-decimal ;
+}
+
+a {
+    text-decoration: none;
+}
+
+h2, h1 {
+    padding: 5px;
+    
+}
+
+
+/* website logo */
+.website-logo {
+    display: inline;
+}
+
+.website-logo_left {
+    background-color: white;
+    color: black;
+}
+
+
+
+
 .artist-result {
     border: 1px black;
     background-color: #f0f0f0;
@@ -46,4 +97,150 @@
     left: 50%;
     -ms-transform: translate(-50%, -50%);
     transform: translate(-50%, -50%);
+}
+
+.artist-profile-image_container {
+    position: relative;
+    width: min-content;
+    padding: 5px;
+    border-style: solid;
+    border: black;
+}
+
+.artist-profile-img {
+    display: block;
+    /*max-height: 250px;
+    max-width: 250px; */
+    max-width: 160px;
+    max-height: 160px;
+    border: black;
+    border-style: solid;
+}
+
+
+
+.artist-profile-img, .artist-profile {
+    border-bottom-right-radius: 5%;
+}
+
+.artist-profile {
+    display: inline-flex;
+    border-style: solid;
+    border-color: black;
+    background-color: whitesmoke;
+    padding: 1%;
+}
+
+.artist-section {
+    border-style: solid;
+    border-color: black;
+    border-bottom-right-radius: 2%;
+}
+
+.artist-profile_songs {
+    display: block;
+}
+
+.artist-album, .related-artist {
+    /* to display it as a grid */
+    display: inline-block;
+    max-width: 200px;
+}
+
+.appears-artist {
+    display: inline-block;
+    max-width: 200px;
+    padding: 10px;
+    border: black;
+    border-style: solid;
+}
+
+.artist-album-img, .related-artist-img {
+    height: 200px;
+    width: 200px;
+}
+
+.artist-albums, .artist-profile_related {
+    display: block;
+    overflow: hidden;
+}
+
+
+/* for inline buttons */
+h3 > button {
+    background: inherit;
+    color: inherit;  
+}
+
+.artist-album > a > h4 {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* search bar */
+.search_bar {
+    background-color: #f0f0f0;
+    overflow: hidden;
+    position: fixed;
+    top: 0;
+    width: 100%;
+    border-bottom-style: solid;
+    border-color: black;
+    border-bottom-width: 1px;
+    display: flex;
+}
+
+.search_bar .input-field {
+    float:left;
+    display: block;
+    color: #f2f2f2;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+    z-index: 3;
+}
+
+/* search bar */
+input#artist_name {
+    height: 40px;
+    font-size: 14pt;
+}
+
+/* go-button */
+input#artist-field 
+{
+    height: 40px;
+    font-size: 14pt;
+    margin: 5px;
+}
+
+.input-field {
+    align-self: center;
+}
+
+.website-logo {
+    display: inherit;
+}
+
+.home-link 
+{
+    display: inherit;
+}
+
+
+.main {
+    margin-top: 10%;
+    z-index: 2;
+}
+
+
+.song-info {
+    background-color: black;
+    display: -webkit-box;
+}
+
+.song-artists 
+{
+    padding: 5px;
 }

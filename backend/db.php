@@ -12,7 +12,6 @@
 
         private function __construct()
         {
-            echo "creating db<br>";
             $this->conn = new mysqli($this->servername, $this->username, $this->password, $this->dbname);
 
         }

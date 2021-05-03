@@ -1,10 +1,15 @@
 <?php
 
 
-require 'vendor/autoload.php';
-require 'backend/artist.php';
+require_once 'vendor/autoload.php';
+require_once 'backend/artist.php';
+require_once 'backend/album.php';
+require_once 'backend/artist.php';
+require_once 'backend/db.php';
+require_once 'backend/trackk.php';
 
-    /*
+
+/*
     class Artist {
         public string $name;
         public string $id;
@@ -29,9 +34,19 @@ require 'backend/artist.php';
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 
+    function init_graph() : ArtistGraph 
+    {
+        $artistdb = ArtistDB::getInstance();
+        $conn = $artistdb->getConnection();
+        $api = new SpotifyWebAPI\SpotifyWebAPI();
+        return new ArtistGraph($conn, $api);
+
+    }
+
+
     class ArtistGraph {
-        private mysqli $conn;
-        private SpotifyWebAPI\SpotifyWebAPI $api;
+        public mysqli $conn;
+        public SpotifyWebAPI\SpotifyWebAPI $api;
 
         function __construct(mysqli $conn, SpotifyWebAPI\SpotifyWebAPI $api) 
         {
@@ -179,10 +194,97 @@ require 'backend/artist.php';
                 $artist->genres = $this->get_artist_genres_by_id($artist->id);
                 // fetch artist images 
                 return $artist;
-
             }
         }
 
+
+        /** Gets the album from the database & returns 
+         * @param string $albumId 
+         * 
+         * @return [type]
+         */
+        public function get_album(string $albumId) {
+            $album = $this->api->getAlbum($albumId);
+            if($album != null) 
+            {
+                if (!$this->album_in_db($albumId)) {
+                    $this->insert_album_into_db($album);
+                }
+                /* insert the album's songs into the database */
+                foreach($album->tracks->items as $song) {
+                    $this->insert_track($song);
+                    $this->attach_track_to_album($song->id, $album->id, $song->track_number);
+                    // should attach the artists here as well but w/e
+                }
+                
+                return new Album($album->name, $album->id, $album->uri, $album->release_date, $album->total_tracks, $album->images, $album->tracks->items);
+            }
+        }
+
+
+        /** Gets all collaborating artists on album - filters out duplicate values
+         * @param string $albumId
+         * 
+         * @return array
+         */
+        public function get_artists_on_album(string $albumId) : array {
+            $artists = array();
+
+            $result = $this->api->getAlbumTracks($albumId);
+            if (count($result->items)) 
+            {
+                foreach($result->items as $track)
+                {
+                    $this->insert_track($track);
+                    $this->attach_track_to_album($track->id, $albumId, $track->track_number);
+                    
+                    foreach($track->artists as $artist) 
+                    {
+                        if (!array_search($artist->id, $artists))
+                        {
+                            $artists[$artist->id] = $this->get_artist_from_db_by_id($artist->id);
+                        }
+                    }
+                }
+            }
+            return array_values($artists);
+        }
+
+        /** Stores song in database
+         * @param object $song
+         * 
+         * @return [type]
+         */
+        private function insert_track(object $track) {
+            $sql = "INSERT IGNORE INTO `track` (`id`, `name`, `uri`, `preview_url`) VALUES (?, ?, ?, ?)";
+            if ($stmt = $this->conn->prepare($sql)) {
+                $stmt->bind_param("ssss", $track->id, $track->name, $track->uri,$track->preview_url);
+                $stmt->execute();
+                $stmt->close();
+                foreach($track->artists as $artist) 
+                {
+                    $this->attach_artist_to_track($track, $artist);
+                }
+            }
+        }
+
+        private function attach_artist_to_track(object $track, object $artist) 
+        {
+            // to ensure we have the correct images & genre
+            if (!$this->artistid_in_db($artist->id))
+            {
+                $fullArtist = $this->api->getArtist($artist->id);
+                $this->store_artist_in_db($fullArtist);
+            }
+
+            $sql = "INSERT IGNORE INTO `artists_on_track` (`artist_id`, `track_id`) VALUES (?, ?)";
+            if ($stmt = $this->conn->prepare($sql))
+            {
+                $stmt->bind_param('ss', $artist->id, $track->id);
+                $stmt->execute();
+                $stmt->close();
+            }
+        }
 
         public function get_images_for_id(string $spotifyId) : array {
             $sql = "SELECT `height`, `width`, `url` FROM `image` WHERE `id` = ?";
@@ -217,7 +319,7 @@ require 'backend/artist.php';
                 // bind the parameters now 
                 $stmt->bind_param('s', $artist_name);
                 $artist_name = $artist;
-                
+
                 // execute 
                 $stmt->execute();
                 $stmt->bind_result($artist_count);
@@ -235,19 +337,23 @@ require 'backend/artist.php';
          * @return [type]
          */
         public function get_artist(string $artistName) : Artist {
-            if (!($this->artist_in_db($artistName, $this->conn))) {
-                // get artist from API 
-                $artists = $this->api->search($artistName, ["artist"]);
-                
-                // store artists in db just cause :-> 
-                foreach($artists->artists->items as $artist) {
+            // get artist from API 
+            $artists = $this->api->search($artistName, ["artist"]);
+            
+            // print_r($artists);
+            // store artists in db just cause :-> 
+            foreach($artists->artists->items as $artist) {
+                if (!($this->artist_in_db($artistName, $this->conn))) {
                     $this->store_artist_in_db($artist);
                 }
-            } 
+            }
 
-            return $this->get_artist_from_db($artistName);
-            // get the artist from the database 
-
+            if (count($artists->artists->items)) {
+                // relevant artists name 
+                $relArtistName = $artists->artists->items[0]->name;
+                return $this->get_artist_from_db($relArtistName);
+            }
+                // get the artist from the database 
         }
 
         /** Checks if artist id is iin db
@@ -272,25 +378,309 @@ require 'backend/artist.php';
             }
         }
 
+        
+        /** Checks if album id is iin db
+         * @param string $id
+         * 
+         * @return bool
+         */
+        private function album_in_db(string $id) : bool {
+            $sql = "SELECT COUNT(*) AS `album_count` FROM `album` WHERE `id` = ?";
+            if ($stmt = $this->conn ->prepare($sql)) {
+                // bind the parameters now 
+                $stmt->bind_param('s', $id);
+
+                // execute 
+                $stmt->execute();
+                $stmt->bind_result($album_count);
+                $stmt->fetch();
+                $stmt->close();
+                return $album_count > 0;
+            } else {
+                return false;
+            }
+        }
+
+        private function track_in_db(string $trackId) : bool {
+            $sql = "SELECT COUNT(*) AS `track_count` FROM `track` WHERE `id` = ?";
+            if ($stmt = $this->conn ->prepare($sql)) {
+                // bind the parameters now 
+                $stmt->bind_param('s', $trackId);
+
+                // execute 
+                $stmt->execute();
+                $stmt->bind_result($track_count);
+                $stmt->fetch();
+                $stmt->close();
+                return $track_count > 0;
+            } else {
+                return false;
+            }
+        }
+
         public function get_related_artists(Artist $artist) : array {
             $relatedArtists = $this->api->getArtistRelatedArtists($artist->id);
+            
+            // echo json_encode($relatedArtists);
+            
             $artistList = array();
             // add each artist to the db
-            foreach($relatedArtists->artists as $artist) {
+            foreach($relatedArtists->artists as $related) {
+
                 // add the artist to the database
-                if (!$this->artistid_in_db($artist->id)) {
-                    $this->store_artist_in_db($artist);
+                if (!$this->artistid_in_db($related->id)) {
+                    $this->store_artist_in_db($related);
                 }
-                $relatedArtist = $this->get_artist_from_db_by_id($artist->id);
+                
+                $relatedArtist = $this->get_artist_from_db_by_id($related->id);         
+
                 array_push($artistList, $relatedArtist);
 
             }
             return $artistList;
         }
 
-        public function get_artist_collabs(Artist $artist)  {
-            // get music from artists 
+
+        private function insert_images(array $images, string $attachId) {
+            $sql = "INSERT IGNORE INTO `image` (`id`, `height`, `width`, `url`) VALUES (?, ?, ?, ?)";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->bind_param('siis', $id, $height, $width, $url);
+
+            // start bulk insertion
+            $this->conn ->query("START TRANSACTION");
+            foreach($images as $image) {
+                $id = $attachId;
+                $height = $image->height;
+                $width = $image->width;
+                $url = $image->url;
+                
+                $stmt->execute();
+            }
+            $stmt->close();
+            $this->conn->query("COMMIT");
         }
+
+        /** Insert the following albums into the database
+         * @param object $albums
+         * 
+         * @return [type]
+         */
+        private function insert_album_into_db(object $album) {
+            if (!$this->album_in_db($album->id))
+            {
+                $sql = "INSERT IGNORE INTO `album` (`id`, `name`, `total_tracks`, `release_date`, `uri`) VALUES (?, ?, ?, ?, ?)";
+                if ($stmt = $this->conn->prepare($sql)) 
+                {
+                    $stmt->bind_param('ssiss', $album->id, $album->name, $album->total_tracks, $album->release_date, $album->uri);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    // insert images if any
+                    if (0 < count($album->images)) {
+                        $this->insert_images($album->images, $album->id);
+                    }
+                }
+            }
+        }
+
+        private function attach_artist_to_album(Artist $artist, object $album) {
+            $sql = "INSERT IGNORE INTO `appears_on` (`artist_id`, `album_id`) VALUES (?, ?)";
+            if ($stmt = $this->conn->prepare($sql))
+            {
+                $stmt->bind_param("ss", $artist->id, $album->id);
+                $stmt->execute();
+                $stmt->close();
+            }
+        }
+
+        /** Binds track to album
+         * @param string $trackId
+         * @param string $albumId
+         * @param int $trackNo
+         * 
+         * @return [type]
+         */
+        private function attach_track_to_album(string $trackId, string $albumId, int $trackNo = 1) {
+            $sql = "INSERT IGNORE INTO `track_on_album` (`track_id`, `album_id`, `track_no`) VALUES (?, ?, ?)";
+            if ($stmt = $this->conn->prepare($sql))
+            {
+                $stmt->bind_param("ssi", $trackId, $albumId, $trackNo);
+                $stmt->execute();
+                $stmt->close();
+            }
+        }
+
+
+        /** Gets the artists albums from the Spotify Database
+         * @param Artist $artist
+         * @param int $limit=10
+         * @param mixed $offset=1
+         * 
+         * @return array
+         */
+        public function get_artist_albums(Artist $artist, int $limit=10, $offset=1) : array {
+            $albums = $this->api->getArtistAlbums($artist->id, [
+                "limit" => $limit,
+                "offset" => $offset
+            ]);
+            
+            foreach($albums->items as $album) {
+                $this->insert_album_into_db($album);
+                // bind artist to this database
+                $this->attach_artist_to_album($artist, $album);
+            }
+
+            // fix this later
+            return $albums->items;
+        }
+
+
+        public function get_track(string $trackId) {
+            // only get track from spotify if not already in db 
+            $track = $this->api->getTrack($trackId);
+            if ($track->external_urls) {
+                // make sure track gets inserted into the database
+                $this->insert_track($track);
+                try
+                {
+                    // get the album ID from the external link
+                    $externalLink = $track->external_urls->spotify;
+                    $strings = explode('/', $externalLink);
+                    $lastId = count($strings) - 1;
+                    $albumId = $strings[$lastId];
+                    
+                    // first insert the album into the database
+                    $album = $this->get_album($albumId);
+                    $this->insert_album_into_db($album);
+
+                    // attach song to album 
+                    $this->attach_track_to_album($trackId, $albumId);
+                
+                    echo "Artists on track: " . count($track->artists);
+
+                    // attach artists to album 
+                    foreach($track->artists as $artist) 
+                    {
+                        if (!$this->artistid_in_db($artist->id))
+                        {
+                            // get artist from API so we have images & genres
+                            $fullArtist = $this->api->getArtist($artist->id);
+                            $this->store_artist_in_db($fullArtist);
+                        }
+                        $this->attach_artist_to_album($artist, $album);
+                    }
+                }
+                catch (\Throwable $th) {
+                    echo "Couldn't retreive external URL from spotify<br>";
+                }
+            } 
+            else 
+            {
+                echo "Track doesn't have an external URL<br>";
+            }
+            //
+            // retrieve track info from DB 
+            return $this->get_track_from_db($trackId);
+        }
+
+
+
+        /** Gets the track ID from the database if exists 
+         * @param string $trackId
+         * 
+         * @return Artist or null 
+         */
+        private function get_track_from_db(string $trackId) : Track {
+            $sql = "SELECT `id`, `name`, `uri`, `preview_url` FROM `track` WHERE `id` = ?";
+            if ($stmt = $this->conn->prepare($sql))
+            {
+                $stmt->bind_param('s', $trackId);
+                $stmt->execute();
+                $stmt->bind_result($id, $name, $uri, $preview_url);
+                $stmt->fetch(); 
+                $stmt->close();
+
+                if ($id != null) 
+                {   
+                    $trackArtists = $this->get_track_artists($trackId);
+                    return new Track($name, $id, $uri, $preview_url, $trackArtists);
+                }
+                else {
+                    return null;
+                }
+            }
+        }
+
+        /** Get artists on TrackId
+         * @param string $trackId
+         * 
+         * @return array
+         */
+        public function get_track_artists(string $trackId) : array 
+        {
+            $artists = array();
+
+            $sql = <<<EOD
+            SELECT `artist`.`id` 
+            FROM `artists_on_track`
+            INNER JOIN `artist` ON `artist`.`id` = `artists_on_track`.`artist_id`
+            WHERE `artists_on_track`.`track_id` = ?
+            EOD;
+
+            if ($stmt = $this->conn->prepare($sql))
+            {
+                $stmt->bind_param('s', $trackId);
+                $stmt->execute();
+                $stmt->bind_result($id);
+                
+                $artistIds = array();
+
+                while($stmt->fetch())
+                {
+                    
+                    array_push($artistIds, $id);
+                }
+                $stmt->close();
+
+                foreach($artistIds as $artistId)
+                {
+                    array_push($artists, $this->get_artist_from_db_by_id($artistId));
+                }
+            }
+
+            return $artists;
+        }
+
+
+        /** Gets all the artists appearing on the album 
+         * @param string $albumId
+         * 
+         * @return array
+         */
+        public function get_album_artists(string $albumId) : array 
+        {
+
+            $sql = "SELECT `artist_id` FROM `appears_on` WHERE `album_id` = ?";
+            $artists = array();
+            if ($stmt = $this->conn->prepare($sql))
+            {
+                $artistIds = array();
+                $stmt->bind_param('s', $albumId);
+                $stmt->execute();
+                $stmt->bind_result($artistId);
+                while($stmt->fetch()) 
+                {
+                    array_push($artistIds, $artistId);
+                }
+                $stmt->close();
+
+                foreach($artistIds as $artistId) 
+                {
+                    array_push($artists, $this->get_artist_from_db_by_id($artistId));
+                }
+            }
+            return $artists;
+        } 
 
 
         /** Stores the provided artist in the database if they don't exist
@@ -299,42 +689,6 @@ require 'backend/artist.php';
          * @return bool
          */
         public function store_artist_in_db(object $artist) : bool {
-            /*
-                {
-                    "external_urls": {
-                        "spotify": "https:\/\/open.spotify.com\/artist\/4u51rwAHPHpmoP5Z8pj1Qn"
-                    },
-                    "followers": {
-                        "href": null,
-                        "total": 3
-                    },
-                    "genres": [],
-                    "href": "https:\/\/api.spotify.com\/v1\/artists\/4u51rwAHPHpmoP5Z8pj1Qn",
-                    "id": "4u51rwAHPHpmoP5Z8pj1Qn",
-                    "images": [
-                        {
-                            "height": 640,
-                            "url": "https:\/\/i.scdn.co\/image\/ab67616d0000b273e0ad9fbd42cc9c6fab6aa187",
-                            "width": 640
-                        },
-                        {
-                            "height": 300,
-                            "url": "https:\/\/i.scdn.co\/image\/ab67616d00001e02e0ad9fbd42cc9c6fab6aa187",
-                            "width": 300
-                        },
-                        {
-                            "height": 64,
-                            "url": "https:\/\/i.scdn.co\/image\/ab67616d00004851e0ad9fbd42cc9c6fab6aa187",
-                            "width": 64
-                        }
-                    ],
-                    "name": "Offseth",
-                    "popularity": 0,
-                    "type": "artist",
-                    "uri": "spotify:artist:4u51rwAHPHpmoP5Z8pj1Qn"
-                }
-            */
-    
             // prepare the sql statement
             $sql = "INSERT IGNORE INTO `artist` (`id`, `name`, `uri`, `popularity`, `href`) VALUES (?, ?, ?, ?, ?)";
             if ($stmt = $this->conn->prepare($sql)) {
@@ -366,27 +720,58 @@ require 'backend/artist.php';
     
                 // insert images if any
                 if (0 < count($artist->images)) {
-                    $sql = "INSERT IGNORE INTO `image` (`id`, `height`, `width`, `url`) VALUES (?, ?, ?, ?)";
-                    $stmt = $this->conn->prepare($sql);
-                    $stmt->bind_param('siis', $id, $height, $width, $url);
-    
-                    // start bulk insertion
-                    $this->conn ->query("START TRANSACTION");
-                    foreach($artist->images as $image) {
-                        $id = $artist->id;
-                        $height = $image->height;
-                        $width = $image->width;
-                        $url = $image->url;
-                        
-                        $stmt->execute();
-                    }
-                    $stmt->close();
-                    $this->conn->query("COMMIT");
+                    $this->insert_images($artist->images, $artist->id);
                 }
             
                 return true;
             }
             return false;
         } 
+
+        /** Gets the album information from the provided TrackId
+         * @param string $trackId
+         * 
+         * @return Album
+         */
+        public function get_album_from_track(string $trackId) {
+            $sql = "SELECT `album`.`id`, `album`.`name`, `album`.`release_date`, `album`.`uri`, `album`.`total_tracks` FROM `track_on_album` INNER JOIN `album` ON `track_on_album`.`album_id` = `album`.`id` WHERE `track_on_album`.`track_id` = ?";
+            if ($stmt = $this->conn->prepare($sql))
+            {
+                $stmt->bind_param('s', $trackId);
+                $stmt->execute();
+                $stmt->bind_result($albumId, $name, $releaseDate, $uri, $totalTracks);
+                $stmt->fetch();
+                $stmt->close();
+                
+                if ($albumId != null)
+                {
+                    $album = new Album($name, $albumId, $uri, $releaseDate, $totalTracks);
+                    $album->images = $this->get_images_for_id($albumId);
+                    
+                    $tracklist = array();
+
+                    // get tracklist
+                    $sql = <<<EOD
+                    SELECT `track`.`id`, `track`.`name`, `track`.`uri`, `track`.`preview_url` 
+                    FROM `track_on_album` 
+                    INNER JOIN `track` ON `track`.`id` = `track_on_album`.`track_id`
+                    WHERE `track_on_album`.`album_id` = ?
+                    EOD;
+
+                    $stmt = $this->conn->prepare($sql);
+                    $stmt->bind_param('s', $albumId);
+                    $stmt->execute();
+                    $stmt->bind_result($trackId, $name, $uri, $preview_url);
+
+                    while($stmt->fetch())
+                    {
+                        array_push($tracklist, new Track($name, $trackId, $uri, $preview_url));
+                    }
+
+                    
+                    return $album;
+                }
+            }
+        }
     }
 ?>  

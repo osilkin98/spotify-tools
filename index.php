@@ -11,7 +11,11 @@
 
     <div class="container">
       <div class="center">
-      <h1>ArtistTree Search</h1>
+      <center>
+      <div class="main-website-logo">
+        <span class="main-website-logo_left">Artis</span><span class="main-website-logo_right">Tree</span>
+      </div>
+      </center>
       <div class="input-field">
         <center>
           <form action="/search.php" method="GET">
