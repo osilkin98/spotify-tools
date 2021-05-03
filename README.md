@@ -1,6 +1,7 @@
 # ArtisTree Graph Search
-
 Project for CSCI373 (Advanced Web Tech)
+
+Author: Oleg Silkin
 
 ## Info 
 
