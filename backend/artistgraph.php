@@ -6,7 +6,7 @@ require_once 'backend/artist.php';
 require_once 'backend/album.php';
 require_once 'backend/artist.php';
 require_once 'backend/db.php';
-require_once 'backend/trackk.php';
+require_once 'backend/track.php';
 
 
 /*
@@ -126,7 +126,7 @@ require_once 'backend/trackk.php';
         }
 
 
-        private function get_artist_from_db(string $artistName) : Artist {
+        private function get_artist_from_db(string $artistName) : ?Artist {
             // we have to get the artist whose name matches the string the closest 
             $sql = "SELECT `name`, `id`, `uri`, `popularity`, `href` FROM `artist` WHERE `name` LIKE ?";
             if ($stmt = $this->conn->prepare($sql)) {
@@ -177,7 +177,7 @@ require_once 'backend/trackk.php';
          * 
          * @return Artist
          */
-        public function get_artist_from_db_by_id(string $artistId) : Artist {
+        public function get_artist_from_db_by_id(string $artistId) : ?Artist {
             // we have to get the artist whose name matches the string the closest 
             $sql = "SELECT `name`, `id`, `uri`, `popularity`, `href` FROM `artist` WHERE `id` = ?";
             if ($stmt = $this->conn->prepare($sql)) {
@@ -203,7 +203,7 @@ require_once 'backend/trackk.php';
          * 
          * @return [type]
          */
-        public function get_album(string $albumId) {
+        public function get_album(string $albumId) : ?Album {
             $album = $this->api->getAlbum($albumId);
             if($album != null) 
             {
@@ -336,7 +336,7 @@ require_once 'backend/trackk.php';
          * 
          * @return [type]
          */
-        public function get_artist(string $artistName) : Artist {
+        public function get_artist(string $artistName) : ?Artist {
             // get artist from API 
             $artists = $this->api->search($artistName, ["artist"]);
             
@@ -352,7 +352,8 @@ require_once 'backend/trackk.php';
                 // relevant artists name 
                 $relArtistName = $artists->artists->items[0]->name;
                 return $this->get_artist_from_db($relArtistName);
-            }
+            } 
+            return null;
                 // get the artist from the database 
         }
 
@@ -590,7 +591,7 @@ require_once 'backend/trackk.php';
          * 
          * @return Artist or null 
          */
-        private function get_track_from_db(string $trackId) : Track {
+        private function get_track_from_db(string $trackId) : ?Track {
             $sql = "SELECT `id`, `name`, `uri`, `preview_url` FROM `track` WHERE `id` = ?";
             if ($stmt = $this->conn->prepare($sql))
             {

@@ -472,3 +472,7 @@ composer.lock
 *.css.map
 *.sass.map
 *.scss.map
+.idea/html.iml
+.idea/modules.xml
+.idea/php.xml
+.idea/vcs.xml

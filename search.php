@@ -88,11 +88,16 @@
         $artist = $artistGraph->get_artist($artistname);
         // display_artist($artist);
 
-
-        $related = $artistGraph->get_related_artists($artist);
-        // add first result to the related
-        $related = array_merge([$artist,], $related);
-        display_artist_list($related);
+        if ($artist == null)
+        {
+            echo "<b>Artist not found :(</b>";
+        }
+        else {
+            $related = $artistGraph->get_related_artists($artist);
+            // add first result to the related
+            $related = array_merge([$artist,], $related);
+            display_artist_list($related);
+        }
         ?>
     </div>
 </body>

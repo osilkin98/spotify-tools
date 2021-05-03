@@ -189,6 +189,7 @@ h3 > button {
     border-color: black;
     border-bottom-width: 1px;
     display: flex;
+    z-index: 1;
 }
 
 .search_bar .input-field {
